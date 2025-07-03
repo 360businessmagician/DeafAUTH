@@ -1,43 +1,132 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import AuthFormContainer from '@/components/AuthFormContainer';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, Video, Upload, CheckCircle2, XCircle, ArrowLeft } from 'lucide-react';
+import { Loader2, Camera, StopCircle, PlayCircle, CheckCircle2, XCircle, ArrowLeft, RefreshCw } from 'lucide-react';
 
 export default function AslVerificationPage() {
   const { toast } = useToast();
-  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [recordedVideoFile, setRecordedVideoFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; title: string; message: string } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
 
   const expectedSignsPhrase = "HELLO WORLD"; // Inform the user about this
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      const file = event.target.files[0];
-      if (!file.type.startsWith('video/')) {
+  useEffect(() => {
+    const getCameraPermission = async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setHasCameraPermission(false);
         toast({
-          title: "Invalid File Type",
-          description: "Please upload a video file.",
-          variant: "destructive",
+          variant: 'destructive',
+          title: 'Camera Not Supported',
+          description: 'Your browser does not support camera access.',
         });
-        setVideoFile(null);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = ""; 
-        }
         return;
       }
-      setVideoFile(file);
-      setFeedback(null); // Clear previous feedback
+      try {
+        const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        setStream(cameraStream);
+        setHasCameraPermission(true);
+      } catch (error) {
+        console.error('Error accessing camera:', error);
+        setHasCameraPermission(false);
+        toast({
+          variant: 'destructive',
+          title: 'Camera Access Denied',
+          description: 'Please enable camera permissions in your browser settings to use this app.',
+        });
+      }
+    };
+
+    getCameraPermission();
+
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      if (videoRef.current?.src) {
+        URL.revokeObjectURL(videoRef.current.src);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
+
+  useEffect(() => {
+    if (stream && videoRef.current && !videoRef.current.srcObject) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  const handleStartRecording = () => {
+    if (stream) {
+      handleRetake(); // Reset state before starting
+      recordedChunksRef.current = [];
+      
+      const options = { mimeType: 'video/webm; codecs=vp9' };
+      try {
+        mediaRecorderRef.current = new MediaRecorder(stream, options);
+      } catch (e) {
+        console.error('Error creating MediaRecorder with specified mimeType, falling back.', e);
+        mediaRecorderRef.current = new MediaRecorder(stream);
+      }
+
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorderRef.current.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+        const file = new File([blob], 'asl-verification.webm', { type: 'video/webm' });
+        setRecordedVideoFile(file);
+        if (videoRef.current) {
+            videoRef.current.srcObject = null;
+            const videoUrl = URL.createObjectURL(blob);
+            videoRef.current.src = videoUrl;
+            videoRef.current.muted = false;
+            videoRef.current.controls = true;
+            videoRef.current.play();
+        }
+      };
+
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
     }
   };
+
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const handleRetake = () => {
+    if (videoRef.current?.src) {
+        URL.revokeObjectURL(videoRef.current.src);
+    }
+    setRecordedVideoFile(null);
+    setFeedback(null);
+    if (videoRef.current && stream) {
+        videoRef.current.src = "";
+        videoRef.current.srcObject = stream;
+        videoRef.current.muted = true;
+        videoRef.current.controls = false;
+        videoRef.current.play();
+    }
+  }
 
   const fileToDataUri = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -50,10 +139,10 @@ export default function AslVerificationPage() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!videoFile) {
+    if (!recordedVideoFile) {
       toast({
-        title: 'No Video Selected',
-        description: 'Please select a video file to verify.',
+        title: 'No Video Recorded',
+        description: 'Please record a video to verify.',
         variant: 'destructive',
       });
       return;
@@ -63,7 +152,7 @@ export default function AslVerificationPage() {
     setFeedback(null);
 
     try {
-      const videoDataUri = await fileToDataUri(videoFile);
+      const videoDataUri = await fileToDataUri(recordedVideoFile);
       
       const response = await fetch('/api/deafauth/verify-asl', {
         method: 'POST',
@@ -84,28 +173,13 @@ export default function AslVerificationPage() {
 
       if (result.isAuthentic) {
         setFeedback({ type: 'success', title: 'Verification Successful!', message: result.message });
-        toast({
-          title: 'Verification Successful!',
-          description: result.message,
-          variant: 'default',
-        });
       } else {
         setFeedback({ type: 'error', title: 'Verification Failed', message: result.message });
-        toast({
-          title: 'Verification Failed',
-          description: result.message,
-          variant: 'destructive',
-        });
       }
     } catch (error) {
       console.error('ASL Verification Submission Error:', error);
       const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
       setFeedback({ type: 'error', title: 'Verification Error', message: errorMessage });
-      toast({
-        title: 'Verification Error',
-        description: errorMessage,
-        variant: 'destructive',
-      });
     } finally {
       setIsLoading(false);
     }
@@ -114,39 +188,69 @@ export default function AslVerificationPage() {
   return (
     <AuthFormContainer
       title="ASL Video Verification"
-      description={`Please upload a video of yourself signing: "${expectedSignsPhrase}". Ensure the video is clear and well-lit.`}
+      description={`Record a video of yourself signing: "${expectedSignsPhrase}". Ensure you are in a clear and well-lit environment.`}
     >
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="asl-video-input" className="text-base">Upload ASL Video</Label>
-          <div className="flex items-center space-x-2">
-            <Video className="h-6 w-6 text-muted-foreground" />
-            <Input
-              id="asl-video-input"
-              type="file"
-              accept="video/*"
-              onChange={handleFileChange}
-              ref={fileInputRef}
-              className="file:text-sm file:font-medium file:bg-primary/10 file:text-primary file:hover:bg-primary/20 file:border-0 file:rounded-md file:px-3 file:py-1.5"
-              aria-describedby="file-upload-status"
-              disabled={isLoading}
-            />
-          </div>
-          {videoFile && <p id="file-upload-status" className="text-sm text-muted-foreground">Selected: {videoFile.name}</p>}
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4 flex flex-col items-center justify-center min-h-[300px] space-y-4">
+          {hasCameraPermission === null && (
+            <div className="flex flex-col items-center text-muted-foreground">
+              <Loader2 className="h-8 w-8 animate-spin mb-2" />
+              <p>Requesting camera access...</p>
+            </div>
+          )}
+          {hasCameraPermission === false && (
+            <Alert variant="destructive">
+                <Camera className="h-5 w-5" />
+                <AlertTitle>Camera Access Required</AlertTitle>
+                <AlertDescription>
+                    Please allow camera access in your browser to use this feature.
+                </AlertDescription>
+            </Alert>
+          )}
+          {hasCameraPermission && (
+            <div className="w-full">
+              <video ref={videoRef} className="w-full aspect-video rounded-md bg-black" autoPlay muted playsInline />
+            </div>
+          )}
+        </div>
+        
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            {!isRecording && !recordedVideoFile && (
+                <Button type="button" onClick={handleStartRecording} disabled={!hasCameraPermission || isLoading} size="lg">
+                    <PlayCircle className="mr-2 h-5 w-5" />
+                    Start Recording
+                </Button>
+            )}
+
+            {isRecording && (
+                 <Button type="button" onClick={handleStopRecording} variant="destructive" size="lg">
+                    <StopCircle className="mr-2 h-5 w-5" />
+                    Stop Recording
+                </Button>
+            )}
+
+            {recordedVideoFile && !isLoading && (
+                 <>
+                    <Button type="button" onClick={handleRetake} variant="outline">
+                      <RefreshCw className="mr-2 h-5 w-5" />
+                      Retake Video
+                    </Button>
+                    <Button type="submit" className="w-full sm:w-auto" disabled={isLoading || !recordedVideoFile} aria-live="polite">
+                      {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                      {isLoading ? 'Verifying...' : 'Verify Video'}
+                    </Button>
+                 </>
+            )}
         </div>
 
         {feedback && (
-          <Alert variant={feedback.type === 'success' ? 'default' : 'destructive'} className={feedback.type === 'success' ? 'bg-green-50 border-green-300 text-green-800 dark:bg-green-900 dark:border-green-700 dark:text-green-200' : ''}>
+          <Alert variant={feedback.type === 'success' ? 'default' : 'destructive'}>
             {feedback.type === 'success' ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
             <AlertTitle>{feedback.title}</AlertTitle>
             <AlertDescription>{feedback.message}</AlertDescription>
           </Alert>
         )}
 
-        <Button type="submit" className="w-full" disabled={isLoading || !videoFile} aria-live="polite">
-          {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Upload className="mr-2 h-5 w-5" />}
-          {isLoading ? 'Verifying...' : 'Verify Video'}
-        </Button>
       </form>
       <div className="mt-8 text-center">
         <Link href="/" passHref>
