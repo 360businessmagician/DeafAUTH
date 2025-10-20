@@ -254,7 +254,7 @@ describe('My API Route', () => {
    npm install
    ```
 
-3. Check Node.js version (requires Node 20+):
+3. Check Node.js version (requires Node 20.0.0+):
    ```bash
    node --version
    ```
@@ -284,7 +284,7 @@ describe('My API Route', () => {
 3. **Keep tests focused**: Each test should validate one thing
 4. **Use descriptive test names**: Test names should explain what they validate
 5. **Mock external dependencies**: Tests should be isolated and fast
-6. **Maintain test coverage**: Aim for >70% code coverage
+6. **Maintain test coverage**: Current test suite provides baseline coverage. Run `npm run test:coverage` to see detailed metrics
 7. **Review CI results**: Always check GitHub Actions results after pushing
 
 ## Continuous Improvement
