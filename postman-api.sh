@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# MBTQ Universe - Postman CLI Setup & Testing Suite
+# MBTQ.dev - Postman CLI Setup & Testing Suite
 
 # This script sets up comprehensive API testing for your decentralized ecosystem
 
@@ -44,27 +44,27 @@ cat > mbtq-api-tests/environments/dev.json << EOF
 “values”: [
 {
 “key”: “base_url”,
-“value”: “https://dev-api.mbtquniverse.com”,
+“value”: “https://dev-api.mbtq.dev”,
 “enabled”: true
 },
 {
 “key”: “deaf_auth_url”,
-“value”: “https://dev-deafauth.mbtquniverse.com”,
+“value”: “https://dev-deafauth.mbtq.dev”,
 “enabled”: true
 },
 {
 “key”: “pinksync_url”,
-“value”: “https://dev-pinksync.mbtquniverse.com”,
+“value”: “https://dev-pinksync.mbtq.dev”,
 “enabled”: true
 },
 {
 “key”: “fibonrose_url”,
-“value”: “https://dev-fibonrose.mbtquniverse.com”,
+“value”: “https://dev-fibonrose.mbtq.dev”,
 “enabled”: true
 },
 {
 “key”: “magicians_url”,
-“value”: “https://dev-360magicians.mbtquniverse.com”,
+“value”: “https://dev-360magicians.mbtq.dev”,
 “enabled”: true
 },
 {
