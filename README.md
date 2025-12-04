@@ -66,6 +66,34 @@ All checks must pass before merging code.
 
 📖 **[View Complete DevOps Documentation](docs/DEVOPS.md)**
 
+### Supabase Edge Functions
+
+The project includes serverless Edge Functions for secure authentication verification:
+
+- **deafauth-verify**: Verifies portable tokens and JWT authentication
+- Automatic deployment via GitHub Actions
+- Server-side security with service role keys
+
+```bash
+# Local development
+supabase functions serve
+
+# Deploy manually
+supabase functions deploy deafauth-verify --project-ref <project-ref>
+```
+
+📖 **[View Edge Functions Documentation](supabase/functions/README.md)**
+
+### Runtime Compatibility
+
+DeafAUTH is designed to be runtime-agnostic and can be adapted to work with:
+
+- **Deno Fresh**: Server-rendered Preact with islands architecture
+- **Vite + React**: Fast build tool with full React compatibility
+- **Node.js/Next.js**: Current default configuration
+
+📖 **[View Runtime Compatibility Guide](docs/RUNTIME_COMPATIBILITY.md)**
+
 ## Example Usage
 
 ```typescript
